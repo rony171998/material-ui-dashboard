@@ -1,4 +1,5 @@
 // paymentFactories.ts
+import axios from 'axios';
 import { PayPalForm } from '../paymentForms/PayPalForm';
 import { PaymentProcessorFactory, PaymentMethod, PaymentResult, PaymentDetails, PaymentFormComponent } from './interfaces';
 
@@ -17,39 +18,43 @@ export class PayPalFactory implements PaymentProcessorFactory {
   }
 }
 
-// paymentFactories.ts
 class PayPalPayment implements PaymentMethod {
   constructor(private paypalData: { email: string }) {}
 
   async processPayment(amount: number): Promise<PaymentResult> {
     try {
-      const response = await fetch('https://localhost:8080/api/pagos', {
-        method: 'POST',
+      const response = await axios.post('https://localhost:8080/api/pagos', {
+        monto: amount,
+        metodo: 'paypal',
+        email: this.paypalData.email
+      }, {
         headers: {
           'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          monto:amount,
-          metodo: 'paypal', 
-          email: this.paypalData.email
-        })
+        }
       });
 
-      if (!response.ok) {
-        throw new Error('PayPal payment failed');
-      }
-
-      const data = await response.json();
-
+      // Axios ya parsea la respuesta JSON automáticamente
+      // y encapsula los errores HTTP (status != 2xx)
       return {
         success: true,
         transactionId: `PP-${Math.random().toString(36).substring(2, 10)}`,
-        message: 'PayPal payment successful '+data.data
+        message: 'PayPal payment successful ' + response.data
       };
     } catch (error) {
+      // Manejo de errores con Axios
+      let errorMessage = 'PayPal payment failed';
+      
+      if (axios.isAxiosError(error)) {
+        errorMessage = error.response?.data?.message || 
+                      error.message || 
+                      'Error processing PayPal payment';
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
       return {
         success: false,
-        message: error instanceof Error ? error.message : 'PayPal payment failed'
+        message: errorMessage
       };
     }
   }

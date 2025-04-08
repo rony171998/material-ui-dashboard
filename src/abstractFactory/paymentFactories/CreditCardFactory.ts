@@ -17,47 +17,51 @@ export class CreditCardFactory implements PaymentProcessorFactory {
   }
 }
 
+import axios from 'axios';
+
 class CreditCardPayment implements PaymentMethod {
-  constructor(private cardDetails: any) {}
+  constructor(private creditCardData: { cardNumber: string; cvv: string; expiry: string }) {}
 
   async processPayment(amount: number): Promise<PaymentResult> {
-    // Lógica real de procesamiento de tarjeta de crédito
-    const payload = {
-      monto:amount,
-      metodo: 'credito',  
-      ...this.cardDetails
-    };
-    
-    const data = await processCreditCardPayment(payload);
-    return {
-      success: true,
-      transactionId: `CC-${Math.random().toString(36).substring(2, 10)}`,
-      message: 'Credit card payment processed successfully '+ data.data
-    };
+    try {
+      const response = await axios.post('https://localhost:8080/api/pagos', {
+        monto: amount,
+        metodo: 'creditcard',
+        ...this.creditCardData
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      return {
+        success: true,
+        transactionId: `CC-${Math.random().toString(36).substring(2, 10)}`,
+        message: 'Credit card payment successful 💳✨ ' + response.data
+      };
+    } catch (error) {
+      let errorMessage = 'Credit card payment failed 💔';
+
+      if (axios.isAxiosError(error)) {
+        errorMessage = error.response?.data?.message || 
+                       error.message || 
+                       'Error processing credit card payment';
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      return {
+        success: false,
+        message: errorMessage
+      };
+    }
   }
 
   getPaymentDetails(): PaymentDetails {
     return {
       type: 'Credit Card',
-      fees: 0.03, // 3% fee
+      fees: 0.03, // Puedes ajustar la tarifa 💸
       currency: 'USD'
     };
   }
 }
-
-const processCreditCardPayment = async (payload: any) => {
-  const response = await fetch('https://localhost:8080/api/pagos', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      //'Authorization': `Bearer ${localStorage.getItem('token')}`
-    },
-    body: JSON.stringify(payload)
-  });
-  
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  
-  return response.json();
-};
