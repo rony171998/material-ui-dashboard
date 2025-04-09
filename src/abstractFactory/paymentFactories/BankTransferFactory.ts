@@ -30,7 +30,7 @@ class BankTransferPayment implements PaymentMethod {
     };
 
     try {
-      const response = await axios.post('https://localhost:8080/api/pagos', payload, {
+      const response = await axios.post('http://localhost:8080/api/pagos', payload, {
         headers: {
           'Content-Type': 'application/json'
         }

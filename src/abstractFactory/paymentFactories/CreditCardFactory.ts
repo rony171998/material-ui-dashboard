@@ -24,7 +24,7 @@ class CreditCardPayment implements PaymentMethod {
 
   async processPayment(amount: number): Promise<PaymentResult> {
     try {
-      const response = await axios.post('https://localhost:8080/api/pagos', {
+      const response = await axios.post('http://localhost:8080/api/pagos', {
         monto: amount,
         metodo: 'creditcard',
         ...this.creditCardData
