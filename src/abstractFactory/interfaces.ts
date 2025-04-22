@@ -25,7 +25,6 @@ export interface NotificacionFormComponent extends React.FC<NotificacionFormProp
 export interface PaymentProcessorFactory {
   createPaymentMethod(config: any): PaymentMethod;
   createFormComponent(): PaymentFormComponent;
-  createNotificacionFormComponent(): NotificacionFormComponent;
   getType(): string;
 }
 

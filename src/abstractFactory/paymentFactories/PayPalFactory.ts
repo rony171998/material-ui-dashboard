@@ -1,7 +1,7 @@
 // paymentFactories.ts
 import axios from 'axios';
 import { PayPalForm } from '../paymentForms/PayPalForm';
-import { PaymentProcessorFactory, PaymentMethod, PaymentResult, PaymentDetails, PaymentFormComponent } from './interfaces';
+import { PaymentProcessorFactory, PaymentMethod, PaymentResult, PaymentDetails, PaymentFormComponent } from '../interfaces';
 
 // Factory para PayPal
 export class PayPalFactory implements PaymentProcessorFactory {
