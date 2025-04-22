@@ -17,6 +17,11 @@ import { AccountBalanceRounded, CreditCardRounded } from '@mui/icons-material';
 import { CreditCardFactory } from '../abstractFactory/paymentFactories/CreditCardFactory';
 import { PayPalFactory } from '../abstractFactory/paymentFactories/PayPalFactory';
 import { BankTransferFactory } from '../abstractFactory/paymentFactories/BankTransferFactory';
+import { SmsFactory } from '../abstractFactory/notificationFactories/SmsFactory';
+import { NotificationProcessor } from '../abstractFactory/NotificationProcessor';
+import { EmailFactory } from '../abstractFactory/notificationFactories/EmailFactory';
+import { PushFactory } from '../abstractFactory/notificationFactories/PushFactory';
+import { WhastappFactory } from '../abstractFactory/notificationFactories/WhatsappFactory';
 
 // Extend the Product type from your rows data
 type Product = typeof rows[0];
@@ -26,6 +31,13 @@ const paymentFactories = {
   credit: new CreditCardFactory(),
   paypal: new PayPalFactory(),
   bank: new BankTransferFactory()
+};
+
+const notificationFactories = {
+  sms: new SmsFactory(),
+  email: new EmailFactory(),
+  push: new PushFactory(),
+  whatsapp: new WhastappFactory()
 };
 
 const Card = styled(MuiCard)<{ selected?: boolean }>(({ theme }) => ({
@@ -64,22 +76,41 @@ const Card = styled(MuiCard)<{ selected?: boolean }>(({ theme }) => ({
 export default function ProductGrid() {
   const [rowSelectionModel, setRowSelectionModel] = React.useState<GridRowSelectionModel>([]);
   const [paymentMethod, setPaymentMethod] = React.useState('credit');
+  const [notificationMethod, setNotificationMethod] = React.useState('sms');
   const [paymentDetails, setPaymentDetails] = React.useState<any>({});
+  const [notificationDetails, setNotificationDetails] = React.useState<any>({});
   const [loading, setLoading] = React.useState(false);
   const [purchaseStatus, setPurchaseStatus] = React.useState<{ success: boolean, message: string } | null>(null);
   const [step, setStep] = React.useState(1); // 1: selección método, 2: detalles pago
   const [openDialog, setOpenDialog] = React.useState(false);
-  const selectedProducts = rows.filter(row => rowSelectionModel.includes(row.id));
-  const currentFactory = paymentFactories[paymentMethod];
-  const paymentProcessor = React.useMemo(() => new PaymentProcessor(currentFactory), [paymentMethod]);
+  const selectedProducts = React.useMemo(() =>
+    rows.filter(row => rowSelectionModel.includes(row.id)),
+    [rowSelectionModel]
+  ); const currentFactory = paymentFactories[paymentMethod];
 
+  const paymentProcessor = React.useMemo(() =>
+    new PaymentProcessor(paymentFactories[paymentMethod]),
+    [paymentMethod]
+  );
+  const notificationProcessor = React.useMemo(() =>
+    new PaymentProcessor(notificationFactories[notificationMethod]),
+    [notificationMethod]
+  );
   const handlePaymentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setPaymentMethod((event.target as HTMLInputElement).value);
   };
 
-  const handlePaymentDetailsChange = (details: any) => {
+  const handlePaymentDetailsChange = React.useCallback((details: any) => {
     setPaymentDetails(prev => ({ ...prev, ...details }));
+  }, []);
+
+  const handleNotificationChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setNotificationMethod((event.target as HTMLInputElement).value);
   };
+
+  const handleNotificationDetailsChange = React.useCallback((details: any) => {
+    setNotificationDetails(prev => ({ ...prev, ...details }));
+  }, []);
 
   const handlePurchaseClick = () => {
     if (selectedProducts.length === 0) {
@@ -91,11 +122,11 @@ export default function ProductGrid() {
   };
 
   const handleNextStep = () => {
-    setStep(2);
+    setStep(step + 1);
   };
 
   const handleBackStep = () => {
-    setStep(1);
+    setStep(step - 1);
   };
 
   const handlePurchaseConfirm = async () => {
@@ -111,15 +142,46 @@ export default function ProductGrid() {
       // 3. Calcular el total
       const total = selectedProducts.reduce((sum, product) => sum + product.price, 0);
 
-      // 4. Aquí es donde se dispara la petición al endpoint
-      // (se ejecuta el processPayment de la implementación concreta)
+      // 4. Procesar el pago
       const result = await processor.processOrder(total, selectedProducts);
 
+      // // 5. Mostrar mensaje de éxito
+      setPurchaseStatus({
+        success: true,
+        message: `${result?.message ?? 0} Transaction ID: ${result?.transactionId ?? 0}`  
+      });
+
+      setStep(3);
+    } catch (error) {
+      setPurchaseStatus({
+        success: false,
+        message: error instanceof Error ? error.message : 'Payment processing failed'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNotificationConfirm = async () => {
+    setLoading(true);
+    try {
+      // 1. Obtener la fábrica adecuada
+      const factory = notificationFactories[notificationMethod];
+
+      // 2. Crear el procesador de pago
+      const processor = new NotificationProcessor(factory);
+      processor.initializeNotificationMethod(notificationDetails);
+
+      // 4. Procesar el pago
+      const result = await processor.processOrder();
+
+      // 5. Mostrar mensaje de éxito
       setPurchaseStatus({
         success: true,
         message: `${result.message} Transaction ID: ${result.transactionId}`
       });
-      
+
+
       setOpenDialog(false);
       setRowSelectionModel([]);
       setStep(1);
@@ -135,7 +197,7 @@ export default function ProductGrid() {
   };
 
   // Add action column to the existing columns
-  const columnsWithActions: GridColDef[] = [
+  const columnsWithActions = React.useMemo(() => [
     ...columns,
     {
       field: 'actions',
@@ -156,11 +218,16 @@ export default function ProductGrid() {
         </Button>
       ),
     },
-  ];
+  ], []);
 
   const renderPaymentForm = () => {
     const FormComponent = paymentProcessor.getFormComponent();
     return <FormComponent onChange={handlePaymentDetailsChange} />;
+  };
+
+  const renderNotificationForm = () => {
+    const FormComponent = notificationProcessor.getFormComponent();
+    return <FormComponent onChange={handleNotificationDetailsChange} />;
   };
 
   return (
@@ -327,7 +394,8 @@ export default function ProductGrid() {
               </Button>
             </DialogActions>
           </>
-        ) : (
+        ) : null}
+        {step === 2 && (
           <>
             <DialogTitle>Complete los detalles de pago</DialogTitle>
             <DialogContent>
@@ -342,6 +410,178 @@ export default function ProductGrid() {
                 endIcon={loading ? <CircularProgress size={20} /> : null}
               >
                 Confirmar Pago
+              </Button>
+            </DialogActions>
+          </>
+        )}
+
+        {step === 3 ? (
+          <>
+            <DialogTitle>Seleccione método de notificacion</DialogTitle>
+            <DialogContent>
+              <FormControl component="fieldset" sx={{ mt: 2 }}>
+                <RadioGroup
+                  aria-label="payment-method"
+                  name="payment-method"
+                  value={notificationMethod}
+                  onChange={handleNotificationChange}
+                  sx={{
+                    //display: 'flex',
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    gap: 2,
+                  }}
+                >
+                  <Card selected={notificationMethod === "sms"}>
+                    <CardActionArea
+                      onClick={() => setNotificationMethod("sms")}
+                      sx={{
+                        '.MuiCardActionArea-focusHighlight': {
+                          backgroundColor: 'transparent',
+                        },
+                        '&:focus-visible': {
+                          backgroundColor: 'action.hover',
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CreditCardRounded
+                          fontSize="small"
+                          sx={[
+                            (theme) => ({
+                              color: 'grey.400',
+                              ...theme.applyStyles('dark', {
+                                color: 'grey.600',
+                              }),
+                            }),
+                            notificationMethod === "sms" && {
+                              color: 'primary.main',
+                            },
+                          ]}
+                        />
+                        <Typography sx={{ fontWeight: 'medium' }}>SMS</Typography>
+                      </CardContent>
+                    </CardActionArea>
+                  </Card>
+                  <Card selected={notificationMethod === "email"}>
+                    <CardActionArea
+                      onClick={() => setNotificationMethod("email")}
+                      sx={{
+                        '.MuiCardActionArea-focusHighlight': {
+                          backgroundColor: 'transparent',
+                        },
+                        '&:focus-visible': {
+                          backgroundColor: 'action.hover',
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CreditCardRounded
+                          fontSize="small"
+                          sx={[
+                            (theme) => ({
+                              color: 'grey.400',
+                              ...theme.applyStyles('dark', {
+                                color: 'grey.600',
+                              }),
+                            }),
+                            notificationMethod === "email" && {
+                              color: 'primary.main',
+                            },
+                          ]}
+                        />
+                        <Typography sx={{ fontWeight: 'medium' }}>Email</Typography>
+                      </CardContent>
+                    </CardActionArea>
+                  </Card>
+                  <Card selected={notificationMethod === "push"}>
+                    <CardActionArea
+                      onClick={() => setNotificationMethod("push")}
+                      sx={{
+                        '.MuiCardActionArea-focusHighlight': {
+                          backgroundColor: 'transparent',
+                        },
+                        '&:focus-visible': {
+                          backgroundColor: 'action.hover',
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CreditCardRounded
+                          fontSize="small"
+                          sx={[
+                            (theme) => ({
+                              color: 'grey.400',
+                              ...theme.applyStyles('dark', {
+                                color: 'grey.600',
+                              }),
+                            }),
+                            notificationMethod === "push" && {
+                              color: 'primary.main',
+                            },
+                          ]}
+                        />
+                        <Typography sx={{ fontWeight: 'medium' }}>Push</Typography>
+                      </CardContent>
+                    </CardActionArea>
+                  </Card>
+                  <Card selected={notificationMethod === "whatsapp"}>
+                    <CardActionArea
+                      onClick={() => setNotificationMethod("whatsapp")}
+                      sx={{
+                        '.MuiCardActionArea-focusHighlight': {
+                          backgroundColor: 'transparent',
+                        },
+                        '&:focus-visible': {
+                          backgroundColor: 'action.hover',
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CreditCardRounded
+                          fontSize="small"
+                          sx={[
+                            (theme) => ({
+                              color: 'grey.400',
+                              ...theme.applyStyles('dark', {
+                                color: 'grey.600',
+                              }),
+                            }),
+                            notificationMethod === "whatsapp" && {
+                              color: 'primary.main',
+                            },
+                          ]}
+                        />
+                        <Typography sx={{ fontWeight: 'medium' }}>Whatsapp</Typography>
+                      </CardContent>
+                    </CardActionArea>
+                  </Card>
+                </RadioGroup>
+              </FormControl>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setOpenDialog(false)}>Cancelar</Button>
+              <Button onClick={handleNextStep} color="primary">
+                Siguiente
+              </Button>
+            </DialogActions>
+          </>
+        ) : null}
+
+        {step === 4 && (
+          <>
+            <DialogTitle>Complete los detalles de notificaciones</DialogTitle>
+            <DialogContent>
+              {renderNotificationForm()}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handleBackStep}>Atrás</Button>
+              <Button
+                onClick={handleNotificationConfirm}
+                color="primary"
+                disabled={loading}
+                endIcon={loading ? <CircularProgress size={20} /> : null}
+              >
+                Enviar Notificacion
               </Button>
             </DialogActions>
           </>

@@ -13,9 +13,19 @@ export interface PaymentFormComponent extends React.FC<PaymentFormProps> {
   validate?: () => boolean;
 }
 
+export interface NotificacionFormProps {
+  onChange: (data: any) => void;
+  onSubmit?: () => void;
+}
+
+export interface NotificacionFormComponent extends React.FC<NotificacionFormProps> {
+  validate?: () => boolean;
+}
+
 export interface PaymentProcessorFactory {
   createPaymentMethod(config: any): PaymentMethod;
   createFormComponent(): PaymentFormComponent;
+  createNotificacionFormComponent(): NotificacionFormComponent;
   getType(): string;
 }
 
