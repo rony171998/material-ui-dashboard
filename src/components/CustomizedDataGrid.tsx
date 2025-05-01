@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { DataGrid, GridRowSelectionModel, GridColDef } from '@mui/x-data-grid';
+import { DataGrid, GridRowSelectionModel } from '@mui/x-data-grid';
 import { columns, rows } from '../internals/data/gridData';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -22,6 +22,7 @@ import { NotificationProcessor } from '../abstractFactory/NotificationProcessor'
 import { EmailFactory } from '../abstractFactory/notificationFactories/EmailFactory';
 import { PushFactory } from '../abstractFactory/notificationFactories/PushFactory';
 import { WhastappFactory } from '../abstractFactory/notificationFactories/WhatsappFactory';
+import { CheckoutSession } from '../prototype/CheckoutPrototype';
 
 // Extend the Product type from your rows data
 type Product = typeof rows[0];
@@ -83,6 +84,9 @@ export default function ProductGrid() {
   const [purchaseStatus, setPurchaseStatus] = React.useState<{ success: boolean, message: string } | null>(null);
   const [step, setStep] = React.useState(1); // 1: selección método, 2: detalles pago
   const [openDialog, setOpenDialog] = React.useState(false);
+  const [lastCheckoutSession, setLastCheckoutSession] = React.useState<CheckoutSession | null>(null);
+  const [savedCheckoutSessions, setSavedCheckoutSessions] = React.useState<CheckoutSession[]>([]);
+
   const selectedProducts = React.useMemo(() =>
     rows.filter(row => rowSelectionModel.includes(row.id)),
     [rowSelectionModel]
@@ -129,26 +133,92 @@ export default function ProductGrid() {
     setStep(step - 1);
   };
 
+  // Implementar handlePurchaseAgain correctamente
+  const handlePurchaseAgain = async () => {
+    try {
+      setLoading(true);
+      if (!lastCheckoutSession) {
+        setPurchaseStatus({
+          success: false,
+          message: 'No hay compras anteriores para repetir'
+        });
+        return;
+      }
+
+
+      // Clonar la sesión anterior usando el Prototype
+      const clonedSession = lastCheckoutSession.clone();
+
+      // Actualizar los estados con los datos de la sesión clonada
+      setPaymentMethod(clonedSession.paymentMethod);
+      setNotificationMethod(clonedSession.notificationMethod);
+      setPaymentDetails(clonedSession.paymentDetails);
+      setNotificationDetails(clonedSession.notificationDetails);
+      setRowSelectionModel(clonedSession.selectedProducts.map(p => p.id));
+
+      const factory = paymentFactories[clonedSession.paymentMethod];
+      const processor = new PaymentProcessor(factory);
+      processor.initializePaymentMethod(clonedSession.paymentDetails);
+
+      const total = clonedSession.selectedProducts.reduce((sum, product) => sum + product.price, 0);
+      const result = await processor.processOrder(total, clonedSession.selectedProducts);
+
+      setPurchaseStatus({
+        success: true,
+        message: `${result?.message ?? 0} Transaction ID: ${result?.transactionId ?? 0}`
+      });
+
+      const facrtoryNotification = notificationFactories[clonedSession.notificationMethod];
+      const processorNotification = new NotificationProcessor(facrtoryNotification);
+      processorNotification.initializeNotificationMethod(clonedSession.notificationDetails);
+      const resultNotification = await processorNotification.processOrder();
+
+      // 5. Mostrar mensaje de éxito
+      setPurchaseStatus({
+        success: true,
+        message: `${resultNotification?.message ??0} Transaction ID: ${resultNotification?.transactionId ?? 0}`
+      });
+
+      setOpenDialog(false);
+      setRowSelectionModel([]);
+      setStep(1);
+      setPaymentDetails({});
+    } catch (error) {
+      setPurchaseStatus({
+        success: false,
+        message: error instanceof Error ? error.message : 'Payment processing failed'
+      });
+    } finally {
+      setLoading(false);
+    }
+
+  };
+
   const handlePurchaseConfirm = async () => {
     setLoading(true);
     try {
-      // 1. Obtener la fábrica adecuada
       const factory = paymentFactories[paymentMethod];
-
-      // 2. Crear el procesador de pago
       const processor = new PaymentProcessor(factory);
       processor.initializePaymentMethod(paymentDetails);
 
-      // 3. Calcular el total
       const total = selectedProducts.reduce((sum, product) => sum + product.price, 0);
-
-      // 4. Procesar el pago
       const result = await processor.processOrder(total, selectedProducts);
 
-      // // 5. Mostrar mensaje de éxito
+      // Crear y guardar la sesión de compra
+      const newCheckoutSession = new CheckoutSession(
+        paymentMethod,
+        notificationMethod,
+        selectedProducts,
+        paymentDetails,
+        notificationDetails
+      );
+
+      setLastCheckoutSession(newCheckoutSession);
+      setSavedCheckoutSessions(prev => [...prev, newCheckoutSession]);
+
       setPurchaseStatus({
         success: true,
-        message: `${result?.message ?? 0} Transaction ID: ${result?.transactionId ?? 0}`  
+        message: `${result?.message ?? 0} Transaction ID: ${result?.transactionId ?? 0}`
       });
 
       setStep(3);
@@ -233,7 +303,6 @@ export default function ProductGrid() {
   return (
     <div style={{ height: 800, width: '100%' }}>
 
-
       <div style={{ marginBottom: 16 }}>
         <Button
           variant="contained"
@@ -273,6 +342,33 @@ export default function ProductGrid() {
           {purchaseStatus.message}
         </Alert>
       )}
+
+
+      <div style={{ marginTop: 16 }}>
+        <Typography variant="h6" gutterBottom>Historial de Compras</Typography>
+        {savedCheckoutSessions.length === 0 ? (
+          <Typography variant="body2">No hay compras guardadas</Typography>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {savedCheckoutSessions.map((session, index) => (
+              <Card key={index} sx={{ p: 2 }}>
+                <Typography variant="subtitle1">
+                  Compra #{index + 1} - {new Date().toLocaleDateString()}
+                </Typography>
+                <Typography variant="body2">
+                  Método: {session.paymentMethod} | Productos: {session.selectedProducts.length}
+                </Typography>
+                <Button
+                  size="small"
+                  onClick={handlePurchaseAgain}
+                >
+                  Repetir esta compra
+                </Button>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
 
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)} fullWidth maxWidth="sm">
         {step === 1 ? (
