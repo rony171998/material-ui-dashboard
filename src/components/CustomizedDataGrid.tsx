@@ -90,7 +90,7 @@ export default function ProductGrid() {
   const selectedProducts = React.useMemo(() =>
     rows.filter(row => rowSelectionModel.includes(row.id)),
     [rowSelectionModel]
-  ); const currentFactory = paymentFactories[paymentMethod];
+  ); 
 
   const paymentProcessor = React.useMemo(() =>
     new PaymentProcessor(paymentFactories[paymentMethod]),
@@ -134,64 +134,63 @@ export default function ProductGrid() {
   };
 
   // Implementar handlePurchaseAgain correctamente
-  const handlePurchaseAgain = async () => {
+  const handlePurchaseAgain = async (session: CheckoutSession) => {
     try {
       setLoading(true);
-      if (!lastCheckoutSession) {
-        setPurchaseStatus({
-          success: false,
-          message: 'No hay compras anteriores para repetir'
-        });
-        return;
-      }
-
-
-      // Clonar la sesión anterior usando el Prototype
-      const clonedSession = lastCheckoutSession.clone();
-
-      // Actualizar los estados con los datos de la sesión clonada
+      
+      // Clonar la sesión
+      const clonedSession = session.clone();
+  
+      // Actualizar todos los estados de una vez
       setPaymentMethod(clonedSession.paymentMethod);
       setNotificationMethod(clonedSession.notificationMethod);
       setPaymentDetails(clonedSession.paymentDetails);
       setNotificationDetails(clonedSession.notificationDetails);
       setRowSelectionModel(clonedSession.selectedProducts.map(p => p.id));
-
-      const factory = paymentFactories[clonedSession.paymentMethod];
-      const processor = new PaymentProcessor(factory);
-      processor.initializePaymentMethod(clonedSession.paymentDetails);
-
+  
+      // Procesar pago
+      const paymentFactory = paymentFactories[clonedSession.paymentMethod];
+      const paymentProcessor = new PaymentProcessor(paymentFactory);
+      paymentProcessor.initializePaymentMethod(clonedSession.paymentDetails);
+  
       const total = clonedSession.selectedProducts.reduce((sum, product) => sum + product.price, 0);
-      const result = await processor.processOrder(total, clonedSession.selectedProducts);
-
+      const paymentResult = await paymentProcessor.processOrder(total, clonedSession.selectedProducts);
+  
+      // Procesar notificación
+      const notificationFactory = notificationFactories[clonedSession.notificationMethod];
+      const notificationProcessor = new NotificationProcessor(notificationFactory);
+      notificationProcessor.initializeNotificationMethod(clonedSession.notificationDetails);
+      const notificationResult = await notificationProcessor.processOrder();
+  
+      // Mostrar resultado combinado
       setPurchaseStatus({
-        success: true,
-        message: `${result?.message ?? 0} Transaction ID: ${result?.transactionId ?? 0}`
+        success: paymentResult.success && notificationResult.success,
+        message: `Pago: ${paymentResult.message} | Notificación: ${notificationResult.message}`
       });
-
-      const facrtoryNotification = notificationFactories[clonedSession.notificationMethod];
-      const processorNotification = new NotificationProcessor(facrtoryNotification);
-      processorNotification.initializeNotificationMethod(clonedSession.notificationDetails);
-      const resultNotification = await processorNotification.processOrder();
-
-      // 5. Mostrar mensaje de éxito
-      setPurchaseStatus({
-        success: true,
-        message: `${resultNotification?.message ??0} Transaction ID: ${resultNotification?.transactionId ?? 0}`
-      });
-
+  
+      // Guardar la nueva sesión
+      const newSession = new CheckoutSession(
+        clonedSession.paymentMethod,
+        clonedSession.notificationMethod,
+        clonedSession.selectedProducts,
+        clonedSession.paymentDetails,
+        clonedSession.notificationDetails
+      );
+      
+      setLastCheckoutSession(newSession);
+      setSavedCheckoutSessions(prev => [...prev, newSession]);
+  
       setOpenDialog(false);
       setRowSelectionModel([]);
       setStep(1);
-      setPaymentDetails({});
     } catch (error) {
       setPurchaseStatus({
         success: false,
-        message: error instanceof Error ? error.message : 'Payment processing failed'
+        message: error instanceof Error ? error.message : 'Error al repetir la compra'
       });
     } finally {
       setLoading(false);
     }
-
   };
 
   const handlePurchaseConfirm = async () => {
@@ -360,7 +359,7 @@ export default function ProductGrid() {
                 </Typography>
                 <Button
                   size="small"
-                  onClick={handlePurchaseAgain}
+                  onClick={()=>handlePurchaseAgain(session)}
                 >
                   Repetir esta compra
                 </Button>

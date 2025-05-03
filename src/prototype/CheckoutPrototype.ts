@@ -1,3 +1,6 @@
+import { PaymentDetails } from "../abstractFactory/interfaces";
+import { NotificationDetails } from "../abstractFactory/interfacesNotification";
+
 // 1. Interfaz de Prototype
 interface CheckoutPrototype {
     clone(): CheckoutPrototype;
@@ -15,8 +18,8 @@ interface CheckoutPrototype {
       paymentMethod: string,
       notificationMethod: string,
       selectedProducts: any[] = [],
-      paymentDetails = {},
-      notificationDetails= {},  
+      paymentDetails: PaymentDetails,
+      notificationDetails: NotificationDetails,
 
     ) {
       this.paymentMethod = paymentMethod;
@@ -27,13 +30,17 @@ interface CheckoutPrototype {
     }
   
     clone(): CheckoutSession {
-      // Hacemos una clonación profunda
+      // Validación de datos antes de clonar
+      if (!this.paymentMethod || !this.notificationMethod) {
+        throw new Error("Cannot clone incomplete checkout session");
+      }
+    
       return new CheckoutSession(
         this.paymentMethod,
         this.notificationMethod,
         [...this.selectedProducts],
-        this.paymentDetails,
-        this.notificationDetails
+        structuredClone(this.paymentDetails), // Clonación profunda moderna
+        structuredClone(this.notificationDetails) // Clonación profunda moderna
       );
     }
   }
