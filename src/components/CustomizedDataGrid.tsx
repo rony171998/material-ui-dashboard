@@ -13,7 +13,7 @@ import Alert from '@mui/material/Alert';
 import { PaymentProcessor } from '../abstractFactory/PaymentProcessor';
 import { CardActionArea, CardContent, styled, Typography } from '@mui/material';
 import MuiCard from '@mui/material/Card';
-import { AccountBalanceRounded, CreditCardRounded } from '@mui/icons-material';
+import { AccountBalanceRounded, CreditCardRounded, Sms, Email, Notifications, WhatsApp } from '@mui/icons-material';
 import { CreditCardFactory } from '../abstractFactory/paymentFactories/CreditCardFactory';
 import { PayPalFactory } from '../abstractFactory/paymentFactories/PayPalFactory';
 import { BankTransferFactory } from '../abstractFactory/paymentFactories/BankTransferFactory';
@@ -73,6 +73,53 @@ const Card = styled(MuiCard)<{ selected?: boolean }>(({ theme }) => ({
     },
   ],
 }));
+
+// Add this new component before the ProductGrid component
+const MethodSelectionCard = ({ 
+  icon: Icon, 
+  label, 
+  value, 
+  selected, 
+  onClick 
+}: { 
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  selected: boolean;
+  onClick: () => void;
+}) => (
+  <Card selected={selected}>
+    <CardActionArea
+      onClick={onClick}
+      sx={{
+        '.MuiCardActionArea-focusHighlight': {
+          backgroundColor: 'transparent',
+        },
+        '&:focus-visible': {
+          backgroundColor: 'action.hover',
+        },
+      }}
+    >
+      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Icon
+          fontSize="small"
+          sx={[
+            (theme) => ({
+              color: 'grey.400',
+              ...theme.applyStyles('dark', {
+                color: 'grey.600',
+              }),
+            }),
+            selected && {
+              color: 'primary.main',
+            },
+          ]}
+        />
+        <Typography sx={{ fontWeight: 'medium' }}>{label}</Typography>
+      </CardContent>
+    </CardActionArea>
+  </Card>
+);
 
 export default function ProductGrid() {
   const [rowSelectionModel, setRowSelectionModel] = React.useState<GridRowSelectionModel>([]);
@@ -344,22 +391,70 @@ export default function ProductGrid() {
 
 
       <div style={{ marginTop: 16 }}>
-        <Typography variant="h6" gutterBottom>Historial de Compras</Typography>
+        <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>Historial de Compras</Typography>
         {savedCheckoutSessions.length === 0 ? (
-          <Typography variant="body2">No hay compras guardadas</Typography>
+          <Card sx={{ p: 3, textAlign: 'center', bgcolor: 'background.default' }}>
+            <Typography variant="body1" color="text.secondary">
+              No hay compras guardadas
+            </Typography>
+          </Card>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
             {savedCheckoutSessions.map((session, index) => (
-              <Card key={index} sx={{ p: 2 }}>
-                <Typography variant="subtitle1">
-                  Compra #{index + 1} - {new Date().toLocaleDateString()}
+              <Card 
+                key={index}
+                sx={{ 
+                  p: 2,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 1,
+                  transition: 'transform 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 3
+                  }
+                }}
+              >
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                  Compra #{savedCheckoutSessions.indexOf(session) + 1}
                 </Typography>
-                <Typography variant="body2">
-                  Método: {session.paymentMethod} | Productos: {session.selectedProducts.length}
+                <Typography variant="subtitle2" color="text.secondary">
+                  {new Date().toLocaleDateString('es-ES', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </Typography>
+                <div style={{ marginTop: 1 }}>
+                  <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CreditCardRounded fontSize="small" color="primary" />
+                    Método: {session.paymentMethod.charAt(0).toUpperCase() + session.paymentMethod.slice(1)}
+                  </Typography>
+                  <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                    <AccountBalanceRounded fontSize="small" color="primary" />
+                    Notificación: {session.notificationMethod.charAt(0).toUpperCase() + session.notificationMethod.slice(1)}
+                  </Typography>
+                </div>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  Productos: {session.selectedProducts.length}
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  Total: ${session.selectedProducts.reduce((sum, product) => sum + product.price, 0).toFixed(2)}
                 </Typography>
                 <Button
+                  variant="outlined"
                   size="small"
-                  onClick={()=>handlePurchaseAgain(session)}
+                  onClick={() => handlePurchaseAgain(session)}
+                  sx={{ 
+                    mt: 2,
+                    alignSelf: 'flex-start',
+                    '&:hover': {
+                      backgroundColor: 'primary.main',
+                      color: 'white'
+                    }
+                  }}
                 >
                   Repetir esta compra
                 </Button>
@@ -381,104 +476,31 @@ export default function ProductGrid() {
                   value={paymentMethod}
                   onChange={handlePaymentChange}
                   sx={{
-                    //display: 'flex',
                     flexDirection: { xs: 'column', sm: 'row' },
                     gap: 2,
                   }}
                 >
-                  <Card selected={paymentMethod === "credit"}>
-                    <CardActionArea
-                      onClick={() => setPaymentMethod("credit")}
-                      sx={{
-                        '.MuiCardActionArea-focusHighlight': {
-                          backgroundColor: 'transparent',
-                        },
-                        '&:focus-visible': {
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CreditCardRounded
-                          fontSize="small"
-                          sx={[
-                            (theme) => ({
-                              color: 'grey.400',
-                              ...theme.applyStyles('dark', {
-                                color: 'grey.600',
-                              }),
-                            }),
-                            paymentMethod === "credit" && {
-                              color: 'primary.main',
-                            },
-                          ]}
-                        />
-                        <Typography sx={{ fontWeight: 'medium' }}>Card</Typography>
-                      </CardContent>
-                    </CardActionArea>
-                  </Card>
-                  <Card selected={paymentMethod === "bank"}>
-                    <CardActionArea
-                      onClick={() => setPaymentMethod("bank")}
-                      sx={{
-                        '.MuiCardActionArea-focusHighlight': {
-                          backgroundColor: 'transparent',
-                        },
-                        '&:focus-visible': {
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <AccountBalanceRounded
-                          fontSize="small"
-                          sx={[
-                            (theme) => ({
-                              color: 'grey.400',
-                              ...theme.applyStyles('dark', {
-                                color: 'grey.600',
-                              }),
-                            }),
-                            paymentMethod === "bank" && {
-                              color: 'primary.main',
-                            },
-                          ]}
-                        />
-                        <Typography sx={{ fontWeight: 'medium' }}>Bank account</Typography>
-                      </CardContent>
-                    </CardActionArea>
-                  </Card>
-                  <Card selected={paymentMethod === "paypal"}>
-                    <CardActionArea
-                      onClick={() => setPaymentMethod("paypal")}
-                      sx={{
-                        '.MuiCardActionArea-focusHighlight': {
-                          backgroundColor: 'transparent',
-                        },
-                        '&:focus-visible': {
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <AccountBalanceRounded
-                          fontSize="small"
-                          sx={[
-                            (theme) => ({
-                              color: 'grey.400',
-                              ...theme.applyStyles('dark', {
-                                color: 'grey.600',
-                              }),
-                            }),
-                            paymentMethod === "paypal" && {
-                              color: 'primary.main',
-                            },
-                          ]}
-                        />
-                        <Typography sx={{ fontWeight: 'medium' }}>Paypal</Typography>
-                      </CardContent>
-                    </CardActionArea>
-                  </Card>
+                  <MethodSelectionCard
+                    icon={CreditCardRounded}
+                    label="Card"
+                    value="credit"
+                    selected={paymentMethod === "credit"}
+                    onClick={() => setPaymentMethod("credit")}
+                  />
+                  <MethodSelectionCard
+                    icon={AccountBalanceRounded}
+                    label="Bank account"
+                    value="bank"
+                    selected={paymentMethod === "bank"}
+                    onClick={() => setPaymentMethod("bank")}
+                  />
+                  <MethodSelectionCard
+                    icon={AccountBalanceRounded}
+                    label="Paypal"
+                    value="paypal"
+                    selected={paymentMethod === "paypal"}
+                    onClick={() => setPaymentMethod("paypal")}
+                  />
                 </RadioGroup>
               </FormControl>
             </DialogContent>
@@ -512,144 +534,47 @@ export default function ProductGrid() {
 
         {step === 3 ? (
           <>
-            <DialogTitle>Seleccione método de notificacion</DialogTitle>
+            <DialogTitle>Seleccione método de notificación</DialogTitle>
             <DialogContent>
               <FormControl component="fieldset" sx={{ mt: 2 }}>
                 <RadioGroup
-                  aria-label="payment-method"
-                  name="payment-method"
+                  aria-label="notification-method"
+                  name="notification-method"
                   value={notificationMethod}
                   onChange={handleNotificationChange}
                   sx={{
-                    //display: 'flex',
                     flexDirection: { xs: 'column', sm: 'row' },
                     gap: 2,
                   }}
                 >
-                  <Card selected={notificationMethod === "sms"}>
-                    <CardActionArea
-                      onClick={() => setNotificationMethod("sms")}
-                      sx={{
-                        '.MuiCardActionArea-focusHighlight': {
-                          backgroundColor: 'transparent',
-                        },
-                        '&:focus-visible': {
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CreditCardRounded
-                          fontSize="small"
-                          sx={[
-                            (theme) => ({
-                              color: 'grey.400',
-                              ...theme.applyStyles('dark', {
-                                color: 'grey.600',
-                              }),
-                            }),
-                            notificationMethod === "sms" && {
-                              color: 'primary.main',
-                            },
-                          ]}
-                        />
-                        <Typography sx={{ fontWeight: 'medium' }}>SMS</Typography>
-                      </CardContent>
-                    </CardActionArea>
-                  </Card>
-                  <Card selected={notificationMethod === "email"}>
-                    <CardActionArea
-                      onClick={() => setNotificationMethod("email")}
-                      sx={{
-                        '.MuiCardActionArea-focusHighlight': {
-                          backgroundColor: 'transparent',
-                        },
-                        '&:focus-visible': {
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CreditCardRounded
-                          fontSize="small"
-                          sx={[
-                            (theme) => ({
-                              color: 'grey.400',
-                              ...theme.applyStyles('dark', {
-                                color: 'grey.600',
-                              }),
-                            }),
-                            notificationMethod === "email" && {
-                              color: 'primary.main',
-                            },
-                          ]}
-                        />
-                        <Typography sx={{ fontWeight: 'medium' }}>Email</Typography>
-                      </CardContent>
-                    </CardActionArea>
-                  </Card>
-                  <Card selected={notificationMethod === "push"}>
-                    <CardActionArea
-                      onClick={() => setNotificationMethod("push")}
-                      sx={{
-                        '.MuiCardActionArea-focusHighlight': {
-                          backgroundColor: 'transparent',
-                        },
-                        '&:focus-visible': {
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CreditCardRounded
-                          fontSize="small"
-                          sx={[
-                            (theme) => ({
-                              color: 'grey.400',
-                              ...theme.applyStyles('dark', {
-                                color: 'grey.600',
-                              }),
-                            }),
-                            notificationMethod === "push" && {
-                              color: 'primary.main',
-                            },
-                          ]}
-                        />
-                        <Typography sx={{ fontWeight: 'medium' }}>Push</Typography>
-                      </CardContent>
-                    </CardActionArea>
-                  </Card>
-                  <Card selected={notificationMethod === "whatsapp"}>
-                    <CardActionArea
-                      onClick={() => setNotificationMethod("whatsapp")}
-                      sx={{
-                        '.MuiCardActionArea-focusHighlight': {
-                          backgroundColor: 'transparent',
-                        },
-                        '&:focus-visible': {
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CreditCardRounded
-                          fontSize="small"
-                          sx={[
-                            (theme) => ({
-                              color: 'grey.400',
-                              ...theme.applyStyles('dark', {
-                                color: 'grey.600',
-                              }),
-                            }),
-                            notificationMethod === "whatsapp" && {
-                              color: 'primary.main',
-                            },
-                          ]}
-                        />
-                        <Typography sx={{ fontWeight: 'medium' }}>Whatsapp</Typography>
-                      </CardContent>
-                    </CardActionArea>
-                  </Card>
+                  <MethodSelectionCard
+                    icon={Sms}
+                    label="SMS"
+                    value="sms"
+                    selected={notificationMethod === "sms"}
+                    onClick={() => setNotificationMethod("sms")}
+                  />
+                  <MethodSelectionCard
+                    icon={Email}
+                    label="Email"
+                    value="email"
+                    selected={notificationMethod === "email"}
+                    onClick={() => setNotificationMethod("email")}
+                  />
+                  <MethodSelectionCard
+                    icon={Notifications}
+                    label="Push"
+                    value="push"
+                    selected={notificationMethod === "push"}
+                    onClick={() => setNotificationMethod("push")}
+                  />
+                  <MethodSelectionCard
+                    icon={WhatsApp}
+                    label="Whatsapp"
+                    value="whatsapp"
+                    selected={notificationMethod === "whatsapp"}
+                    onClick={() => setNotificationMethod("whatsapp")}
+                  />
                 </RadioGroup>
               </FormControl>
             </DialogContent>
